@@ -1,0 +1,33 @@
+- name: Read control-plane join command
+  slurp:
+    src: /opt/homelab/join-controlplane.sh
+  delegate_to: "{{ groups['bootstrap_controlplane'][0] }}"
+  register: controlplane_join_file
+
+- name: Decode control-plane join command
+  set_fact:
+    controlplane_join_command: "{{ controlplane_join_file.content | b64decode | trim }}"
+
+- name: Join cluster as control-plane
+  command: >-
+    {{ controlplane_join_command }}{% if inventory_hostname == 'homelab-0' %} --ignore-preflight-errors=Mem{% endif %}
+  args:
+    creates: /etc/kubernetes/kubelet.conf
+
+- name: Keep dedicated control-plane unschedulable
+  command: >
+    kubectl taint nodes {{ inventory_hostname }}
+    node-role.kubernetes.io/control-plane=:NoSchedule
+  delegate_to: "{{ groups['bootstrap_controlplane'][0] }}"
+  when: inventory_hostname not in groups['controlplane_workers']
+  failed_when: false
+  changed_when: false
+
+- name: Allow workloads on control-plane workers
+  command: >
+    kubectl taint nodes {{ inventory_hostname }}
+    node-role.kubernetes.io/control-plane-
+  delegate_to: "{{ groups['bootstrap_controlplane'][0] }}"
+  when: inventory_hostname in groups['controlplane_workers']
+  failed_when: false
+  changed_when: false

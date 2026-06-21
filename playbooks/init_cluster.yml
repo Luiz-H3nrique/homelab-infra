@@ -1,0 +1,5 @@
+- hosts: bootstrap_controlplane
+  become: true
+
+  roles:
+    - controlplane

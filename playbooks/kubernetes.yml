@@ -1,0 +1,6 @@
+- apt:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present

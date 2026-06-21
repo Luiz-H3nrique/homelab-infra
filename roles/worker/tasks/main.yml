@@ -1,0 +1,12 @@
+- name: Read join command
+  slurp:
+    src: /opt/homelab/join-worker.sh
+  delegate_to: "{{ groups['bootstrap_controlplane'][0] }}"
+  register: join_file
+
+- name: Decode join command
+  set_fact:
+    kube_join_command: "{{ join_file.content | b64decode | trim }}"
+
+- name: Join cluster
+  command: "{{ kube_join_command }}"

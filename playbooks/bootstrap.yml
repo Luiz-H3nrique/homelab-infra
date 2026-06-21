@@ -1,0 +1,7 @@
+- hosts: controlplane
+  become: true
+
+  roles:
+    - common
+    - containerd
+    - kubernetes
