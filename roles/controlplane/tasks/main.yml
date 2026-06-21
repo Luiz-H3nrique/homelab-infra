@@ -1,0 +1,53 @@
+- name: Init cluster
+  command: >
+    kubeadm init
+    --pod-network-cidr={{ pod_network_cidr }}
+    --control-plane-endpoint={{ control_plane_endpoint | default((hostvars[inventory_hostname].ansible_host | default(inventory_hostname)) ~ ':6443') }}
+  args:
+    creates: /etc/kubernetes/admin.conf
+
+- name: Create directory
+  file:
+    path: /opt/homelab
+    state: directory
+
+- name: Generate worker join command
+  command: kubeadm token create --print-join-command
+  register: worker_join_cmd
+  changed_when: false
+
+- name: Save worker join command
+  copy:
+    content: "{{ worker_join_cmd.stdout }}"
+    dest: /opt/homelab/join-worker.sh
+    mode: '0755'
+
+- name: Upload certs and get certificate key
+  shell: kubeadm init phase upload-certs --upload-certs | tail -n1
+  register: controlplane_cert_key
+  changed_when: false
+
+- name: Generate control-plane join base command
+  command: kubeadm token create --print-join-command
+  register: controlplane_join_base
+  changed_when: false
+
+- name: Save control-plane join command
+  copy:
+    content: "{{ controlplane_join_base.stdout }} --control-plane --certificate-key {{ controlplane_cert_key.stdout }}"
+    dest: /opt/homelab/join-controlplane.sh
+    mode: '0755'
+
+- name: Setup kubeconfig
+  shell: |
+    mkdir -p /home/{{ ansible_user }}/.kube
+    cp /etc/kubernetes/admin.conf /home/{{ ansible_user }}/.kube/config
+    chown -R {{ ansible_user }}:{{ ansible_user }} /home/{{ ansible_user }}/.kube
+
+- name: Allow workloads on bootstrap control-plane when requested
+  command: >
+    kubectl taint nodes {{ inventory_hostname }}
+    node-role.kubernetes.io/control-plane- 
+  when: inventory_hostname in groups['controlplane_workers']
+  failed_when: false
+  changed_when: false

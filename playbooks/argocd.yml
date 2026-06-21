@@ -1,0 +1,76 @@
+---
+- hosts: homelab-2
+  become: true
+
+  vars:
+    argocd_namespace: argocd
+    argocd_install_manifest_url: https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    argocd_nodeport_http: 30080
+    argocd_nodeport_https: 30443
+    argocd_kubeconfig: /etc/kubernetes/admin.conf
+
+  environment:
+    KUBECONFIG: "{{ argocd_kubeconfig }}"
+
+  tasks:
+    - name: Ensure Argo CD namespace exists
+      shell: |
+        kubectl --kubeconfig {{ argocd_kubeconfig }} create namespace {{ argocd_namespace }} --dry-run=client -o yaml \
+        | kubectl --kubeconfig {{ argocd_kubeconfig }} apply -f -
+
+    - name: Install Argo CD
+      command: kubectl --kubeconfig {{ argocd_kubeconfig }} apply --server-side -f {{ argocd_install_manifest_url }}
+
+    - name: Expose Argo CD server with NodePort
+      shell: |
+        kubectl --kubeconfig {{ argocd_kubeconfig }} apply -f - <<'EOF'
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: argocd-server
+          namespace: {{ argocd_namespace }}
+        spec:
+          type: NodePort
+          selector:
+            app.kubernetes.io/name: argocd-server
+          ports:
+            - name: http
+              port: 80
+              protocol: TCP
+              targetPort: 8080
+              nodePort: {{ argocd_nodeport_http }}
+            - name: https
+              port: 443
+              protocol: TCP
+              targetPort: 8080
+              nodePort: {{ argocd_nodeport_https }}
+        EOF
+
+    - name: Allow Argo CD workloads on control-plane nodes
+      shell: |
+        kubectl --kubeconfig {{ argocd_kubeconfig }} patch {{ item.kind }} {{ item.name }} -n {{ argocd_namespace }} --type merge -p '{"spec":{"template":{"spec":{"tolerations":[{"key":"node-role.kubernetes.io/control-plane","operator":"Exists","effect":"NoSchedule"}]}}}}'
+      loop:
+        - kind: deployment
+          name: argocd-applicationset-controller
+        - kind: deployment
+          name: argocd-dex-server
+        - kind: deployment
+          name: argocd-notifications-controller
+        - kind: deployment
+          name: argocd-redis
+        - kind: deployment
+          name: argocd-repo-server
+        - kind: deployment
+          name: argocd-server
+        - kind: statefulset
+          name: argocd-application-controller
+
+    - name: Wait for Argo CD server rollout
+      command: kubectl --kubeconfig {{ argocd_kubeconfig }} rollout status deployment/argocd-server -n {{ argocd_namespace }} --timeout=300s
+
+    - name: Show Argo CD access URL
+      debug:
+        msg:
+          - "Argo CD disponivel em: https://{{ ansible_host }}:{{ argocd_nodeport_https }}"
+          - "Usuario inicial: admin"
+          - "Senha inicial: kubectl -n {{ argocd_namespace }} get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d && echo"

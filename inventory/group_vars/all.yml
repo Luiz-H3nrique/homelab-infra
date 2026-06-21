@@ -1,0 +1,5 @@
+# Variáveis globais do grupo all.
+ansible_user : ansible
+cluster_name: homelab
+pod_network_cidr: "10.244.0.0/16"
+kubernetes_version: "1.30"
