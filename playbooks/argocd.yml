@@ -8,6 +8,7 @@
     argocd_nodeport_http: 30080
     argocd_nodeport_https: 30443
     argocd_kubeconfig: /etc/kubernetes/admin.conf
+    argocd_reconciliation_timeout: 30s
 
   environment:
     KUBECONFIG: "{{ argocd_kubeconfig }}"
@@ -20,6 +21,10 @@
 
     - name: Install Argo CD
       command: kubectl --kubeconfig {{ argocd_kubeconfig }} apply --server-side -f {{ argocd_install_manifest_url }}
+
+    - name: Set Argo CD global reconciliation interval
+      shell: |
+        kubectl --kubeconfig {{ argocd_kubeconfig }} patch configmap argocd-cm -n {{ argocd_namespace }} --type merge -p '{"data":{"timeout.reconciliation":"{{ argocd_reconciliation_timeout }}"}}'
 
     - name: Expose Argo CD server with NodePort
       shell: |
