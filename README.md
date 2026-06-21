@@ -74,4 +74,3 @@ ansible-playbook -i inventory/hosts.yml playbooks/argocd.yml
 - O inventário contém dados específicos do ambiente e deve ser mantido fora de compartilhamentos públicos.
 - Alguns addons dependem de um cluster já funcional e de conectividade entre os nós.
 - O uso de playbooks dedicados por serviço facilita manutenção, troubleshooting e reaplicação idempotente.
-
